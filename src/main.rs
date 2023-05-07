@@ -176,15 +176,6 @@ impl<'train> Net<'train> {
             training_output,
             activation_fns
         }
-
-        // Si t'as un doute sur les axes dans les infos du Net
-        /* println!("{weights:#?}");
-        println!();
-        println!("{biais:#?}");
-        println!();
-        println!("{sums:#?}");
-        println!();
-        println!("{activations:#?}"); */
     }
 
     // On calcule la sortie du réseau et l'ensemble des activations et des sums
