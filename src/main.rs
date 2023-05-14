@@ -1,11 +1,12 @@
 extern crate ndarray;
-use ndarray::prelude::*;
+use ndarray::{prelude::*, concatenate};
 use plotters::prelude::*;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 use rand::{Rng, thread_rng};
 use rand::seq::SliceRandom;
+use rand::distributions::{Distribution, Uniform};
 use std::time;
 use std::env;
 use image::GenericImageView;
@@ -99,6 +100,22 @@ enum ActivationFn {
     ReLU,
     Softmax
 }
+
+// La direction dans laquelle on peut slider l'image
+#[derive(Clone, Copy)]
+enum Direction {
+    Up,
+    Down,
+    Right,
+    Left
+}
+
+const DIRECTIONS: [Direction; 4] = [
+    Direction::Up,
+    Direction::Down,
+    Direction::Right,
+    Direction::Left
+];
 
 // Chaque fonction d'activation s'applique directement sur l'entièreté de la couche
 fn sigmoid(sums: &Layer) -> Layer {
@@ -328,6 +345,8 @@ impl<'train> Net<'train> {
             sum_nabla_weights_default.push(Array::<f64, Ix2>::zeros(self.weights[n_couche].raw_dim()));
         }
 
+        let mut rng = thread_rng();
+        let interval = Uniform::from(0..5);
         for epoch in 0..epochs {
             if printing {
                 println!("Epoch = {}/{epochs}", epoch+1);
@@ -351,9 +370,15 @@ impl<'train> Net<'train> {
 
                 // Pour chaque couple (input, output) dans le batch
                 for index in 0..input_batch.dim().0 {
+                    // Tout d'abord on décale l'entrée
+                    let slide_input = slide_arr(
+                        &input_batch.slice(s![index, ..]),
+                        (28, 28),
+                        *DIRECTIONS.choose(&mut rng).unwrap(),
+                        interval.sample(&mut rng));
                     // On calcule le gradient
                     let (nabla_biais, nabla_weights) = self.gradient(
-                        input_batch.slice(s![index, ..]),
+                        slide_input.view(),
                         output_batch.slice(s![index, ..]));
                     // On les additionne aux sum
                     for n_couche in 0..nabla_biais.len() {
@@ -418,6 +443,37 @@ impl<'train> Net<'train> {
 
 }
 
+// La fonction qui permet de décaler les images dans une direction ou une autre
+// Elle prend en entrée un Array1D qu'elle va mettre en 2D puis le remettre en 1D
+fn slide_arr<T: Clone>(arr: &ArrayView<T, Ix1>, shape: (usize, usize), dir: Direction, n: usize) -> Array<T, Ix1> {
+    // On transforme l'Array1D en 2D (c'est un ArrayView)
+    let arr2dview = arr.into_shape(shape)
+        .unwrap();
+    // L'axis qui nous importe
+    let axis = Axis(match dir {
+        Direction::Up => 0,
+        Direction::Down => 0,
+        Direction::Right => 1,
+        Direction::Left => 1
+    });
+    // On split pour remettre à l'envers
+    let (part1, part2) = arr2dview.split_at(
+        axis,
+        // En fonction de la direction, pour n on part de devant ou de derrière
+        match dir {
+            Direction::Up => n,
+            Direction::Down => arr2dview.dim().0 - n,
+            Direction::Right => arr2dview.dim().1 - n,
+            Direction::Left => n
+        }
+    );
+    // On concatène les 2 morceaux puis on flatten l'Array2D
+    concatenate(axis, &[part2, part1])
+        .unwrap()
+        .into_shape(shape.0 * shape.1)
+        .unwrap()
+}
+
 // Decoder une base de données images MNIST en un array 2D (les images sont flatten)
 fn mnist_decode_images(filename: &str) -> Array<f64, Ix2> {
     let path = Path::new(filename);
@@ -433,6 +489,7 @@ fn mnist_decode_images(filename: &str) -> Array<f64, Ix2> {
     for _i in 0..16 { bytes.next(); }
     // C'est incroyablement plus clean que l'ancienne version
     Array::<f64, Ix2>::from_shape_simple_fn((60_000, 784), || bytes.next().unwrap().unwrap() as f64 / 255.)
+    // On décale l'image seulement lorsqu'elle rentre dans le réseau
 }
 
 // Idem pour les labels MNIST
