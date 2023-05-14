@@ -1,3 +1,0 @@
-[X] Suppr activations et sums du struct Net -> run n'a plus besoin de &mut self, mais juste &self
-[X] Adapter gradient pour utiliser les activations et les sommes renvoyées par run -> gradient plus besoin de &mut self mais juste &self
-[ ] Calculer chaque batch sans que ça mut le réseau -> join à la fin avant de renvoyé le résultat
